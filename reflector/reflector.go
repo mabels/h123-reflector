@@ -1,16 +1,18 @@
-package main
+package reflector
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"os"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
+	"github.com/mabels/h123-reflector/models"
 )
 
 func h12server(stopper *sync.WaitGroup,
@@ -47,22 +49,34 @@ func h3server(stopper *sync.WaitGroup, listen string, certFile string, keyFile s
 	return srv
 }
 
-type Response struct {
-	RemoteAddr string
-	Protocol   string
-	Url        string
-	Header     http.Header
+type ReflectorHandler struct {
 }
 
-type reflectorHandler struct {
-}
+func (_x ReflectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// fmt.Fprintf(os.Stderr, "reflector: %s:%s\n", r.RemoteAddr, r.URL.RawQuery)
+	var bodyStr *string
+	var errStr *string
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		my := fmt.Errorf("Error reading body: %v", err).Error()
+		errStr = &my
+	} else if len(body) > 0 {
+		my := string(body)
+		bodyStr = &my
+	}
 
-func (_x reflectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	out, _ := json.MarshalIndent(Response{
+	if err != nil {
+		my := err.Error()
+		errStr = &my
+	}
+	out, _ := json.MarshalIndent(models.ReflectorResponse{
 		RemoteAddr: r.RemoteAddr,
 		Protocol:   r.Proto,
 		Url:        r.URL.String(),
 		Header:     r.Header,
+		Method:     r.Method,
+		Body:       bodyStr,
+		Error:      errStr,
 	}, "", "  ")
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(200)
@@ -70,36 +84,11 @@ func (_x reflectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func Start(wg *sync.WaitGroup, host string, cert string, key string, handler http.Handler) func() {
-	fmt.Printf("Starting:%s\n", host)
-	// go func() {
 	h12 := h12server(wg, host, cert, key, handler)
-	// }()
-	fmt.Printf("Listening H12 on %s\n", host)
 	h3 := h3server(wg, host, cert, key, handler)
-	/*
-		go func() {
-			fmt.Printf("Waiting H12\n")
-			time.Sleep(time.Second * 5)
-			fmt.Printf("Shutting down H12\n")
-			h12.Shutdown(context.TODO())
-		}()
-	*/
 	return func() {
-		h12.Shutdown(context.TODO())
+		ctx, _ := context.WithDeadline(context.Background(), time.Now())
+		h12.Shutdown(ctx)
 		h3.Close()
-		// http.HandleFunc("/", nil)
 	}
-}
-
-func main() {
-	host := "localhost:3000"
-	cert := "./dev.cert"
-	key := "./dev.key"
-	wg := sync.WaitGroup{}
-	var handler http.Handler = reflectorHandler{}
-	if os.Args[len(os.Args)-1] == "muxfront" {
-		// handler = muxFrontendHandler{}
-	}
-	Start(&wg, host, cert, key, handler)
-	wg.Wait()
 }

@@ -1,4 +1,4 @@
-package main
+package reflector
 
 import (
 	"crypto/tls"
@@ -11,11 +11,12 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
+	"github.com/mabels/h123-reflector/models"
 )
 
 func Test_H1(t *testing.T) {
 	wg := sync.WaitGroup{}
-	stopper := Start(&wg, "localhost:3000", "./dev.cert", "./dev.key", reflectorHandler{})
+	stopper := Start(&wg, "localhost:3000", "./dev.cert", "./dev.key", ReflectorHandler{})
 
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -33,7 +34,7 @@ func Test_H1(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		res := Response{}
+		res := models.ReflectorResponse{}
 		json.Unmarshal(body, &res)
 		if res.Protocol != "HTTP/1.1" {
 			t.Error("Expected HTTP/1.1", string(body))
@@ -49,7 +50,7 @@ func Test_H1(t *testing.T) {
 
 func Test_H2(t *testing.T) {
 	wg := sync.WaitGroup{}
-	stopper := Start(&wg, "localhost:3000", "./dev.cert", "./dev.key", reflectorHandler{})
+	stopper := Start(&wg, "localhost:3000", "./dev.cert", "./dev.key", ReflectorHandler{})
 	time.Sleep(time.Millisecond * 200)
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -67,7 +68,7 @@ func Test_H2(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		res := Response{}
+		res := models.ReflectorResponse{}
 		json.Unmarshal(body, &res)
 		if res.Protocol != "HTTP/2.0" {
 			t.Error("Expected HTTP/2.0", string(body))
@@ -83,7 +84,7 @@ func Test_H2(t *testing.T) {
 
 func Test_H3(t *testing.T) {
 	wg := sync.WaitGroup{}
-	stopper := Start(&wg, "localhost:3000", "./dev.cert", "./dev.key", reflectorHandler{})
+	stopper := Start(&wg, "localhost:3000", "./dev.cert", "./dev.key", ReflectorHandler{})
 
 	var qconf quic.Config
 	roundTripper := &http3.RoundTripper{
@@ -104,7 +105,7 @@ func Test_H3(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		res := Response{}
+		res := models.ReflectorResponse{}
 		json.Unmarshal(body, &res)
 		if res.Protocol != "HTTP/3.0" {
 			t.Error("Expected HTTP/3.0", string(body))
